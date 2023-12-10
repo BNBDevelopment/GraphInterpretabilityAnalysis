@@ -21,7 +21,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 path = osp.join(osp.dirname(osp.realpath(__file__)), 'data', 'Planetoid')
 
 seed_everything(seed=12345)
-lr = 0.0001
+lr = 0.00002
 weight_decay=5e-4
 b_size = 64
 
@@ -74,16 +74,9 @@ n_classes = train_dataset.num_classes
 
 # GCN Node Classification =====================================================
 
-
-
-#model = GCN(n_features, n_classes, h_dim=128).to(device)
-model = GPS_Model(n_features, n_classes, h_dim=32, n_layers=3, n_heads=4).to(device)
-
-optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-
 configuration = {
     'n_epochs': 100,
-    'optimizer': optimizer,
+    #'optimizer': optimizer,
     'train_data': train_dl,
     'val_data': val_dl,
     'test_data': test_dl,
@@ -93,7 +86,17 @@ configuration = {
     'model_save_path': "saved_models/",
     'save_strategy': "max_val_acc",
     'load_model': False,
+    'model_hdim': 64,
+    'model_n_layers': 3,
+    'model_n_heads': 8,
 }
+
+model = GCN(n_features, n_classes, h_dim=128).to(device)
+#model = GPS_Model(n_features, n_classes, h_dim=configuration['model_hdim'], n_layers=configuration['model_n_layers'], n_heads=configuration['model_n_heads']).to(device)
+
+configuration['optimizer'] = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+
 
 
 
