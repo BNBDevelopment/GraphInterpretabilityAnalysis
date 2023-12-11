@@ -57,7 +57,7 @@ def train(model, configuration):
 
         if configuration['save_strategy'] == "max_val_acc":
             if val_acc > max_val_acc:
-                print(f"Saving at epoch {epoch} with validation accuracy {val_acc} better than old validation accuracy {max_val_acc}")
+                print(f"Saving at epoch {epoch} with validation accuracy {val_acc} better than old validation accuracy {max_val_acc:.4f}")
                 if os.path.exists(old_save_path):
                     os.remove(old_save_path)
                 max_val_acc = val_acc

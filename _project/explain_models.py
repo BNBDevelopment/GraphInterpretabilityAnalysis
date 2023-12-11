@@ -60,7 +60,8 @@ class GPS_Model(torch.nn.Module):
     def forward(self, x, edge_index, batch_mapping=None, edge_attr=None):
 
         #x = torch.nn.functional.dropout(x, training=self.training)
-        x = torch.stack(torch_geometric.utils.unbatch(x, batch_mapping), dim=0)
+        if not batch_mapping is None:
+            x = torch.stack(torch_geometric.utils.unbatch(x, batch_mapping), dim=0)
         x = self.node_feature_stretch(x)
         x = x.reshape(-1, x.shape[-1])
 
