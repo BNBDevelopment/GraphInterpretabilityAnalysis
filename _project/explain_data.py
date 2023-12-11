@@ -13,9 +13,9 @@ def get_dataset(path, ds_choice, device, b_size):
     test_percetn = 0.1
 
     if ds_choice == 'benchmark':
-        train_dataset = GNNBenchmarkDataset(path, name='MNIST', split='train')
-        val_dataset = GNNBenchmarkDataset(path, name='MNIST', split='val')
-        test_dataset = GNNBenchmarkDataset(path, name='MNIST', split='test')
+        train_dataset = GNNBenchmarkDataset(path, name='PATTERN', split='train')
+        val_dataset = GNNBenchmarkDataset(path, name='PATTERN', split='val')
+        test_dataset = GNNBenchmarkDataset(path, name='PATTERN', split='test')
 
     elif ds_choice == 'mnist':
         train_dataset = MNISTSuperpixels(path, train=True)

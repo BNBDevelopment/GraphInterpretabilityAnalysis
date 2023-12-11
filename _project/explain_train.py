@@ -52,7 +52,7 @@ def train(model, configuration):
 
 
         val_acc = val_count_correct/len(val_dl.dataset)
-        model_name = f"{configuration['model_name']}_Epoch_{epoch}_ValAcc_{val_acc}.pt"
+        model_name = f"{configuration['model_name']}_{'dataset_name'}_Epoch_{epoch}_ValAcc_{val_acc}.pt"
         model_save_path = configuration['model_save_path']
 
         if configuration['save_strategy'] == "max_val_acc":
