@@ -1,7 +1,8 @@
 import torch
 import torch_geometric
-from torch.nn import ModuleList
-from torch_geometric.nn import GCNConv, GATConv, global_mean_pool, GPSConv, Sequential, GINEConv, TransformerConv
+from torch.nn import ModuleList, ReLU, Linear, GRU
+from torch_geometric.nn import GCNConv, GATConv, global_mean_pool, GPSConv, Sequential, GINEConv, TransformerConv, \
+    NNConv, Set2Set
 from torch.nn import Embedding
 
 class GCN(torch.nn.Module):
@@ -152,11 +153,13 @@ class AttentionConv_Model(torch.nn.Module):
 
 
 class TransformerConv2(torch.nn.Module):
-    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=38, h_dim=32, n_layers=1, n_heads=4, do_embedding=False):
+    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=38, h_dim=32, n_layers=1, n_heads=4, do_embedding=False, is_node_classification=False):
         super().__init__()
 
         self.do_embedding = do_embedding
         self.n_classes = n_classes
+        self.is_node_classification = is_node_classification
+
         if self.do_embedding:
             self.embed = Embedding(n_embds, embd_dim)
             self.conv1 = TransformerConv(in_channels=embd_dim, out_channels=h_dim // 2, heads=n_heads)
@@ -172,23 +175,67 @@ class TransformerConv2(torch.nn.Module):
     def forward(self, x, edge_index, batch_mapping=None, edge_attr=None):
         if self.do_embedding:
             x = self.embed(x).squeeze()
-        x = self.conv1(x, edge_index)
-        x = x.relu()
-        x = torch.nn.functional.dropout(x, training=self.training)
-        x = self.conv2(x, edge_index)
-        x = x.relu()
-        x = torch.nn.functional.dropout(x, training=self.training)
-        x = self.conv3(x, edge_index)
+        if edge_attr is None:
+            x = self.conv1(x, edge_index)
+            x = x.relu()
+            x = torch.nn.functional.dropout(x, training=self.training)
+            x = self.conv2(x, edge_index)
+            x = x.relu()
+            x = torch.nn.functional.dropout(x, training=self.training)
+            x = self.conv3(x, edge_index)
+        else:
+            x = self.conv1(x, edge_index, edge_attr=edge_attr)
+            x = x.relu()
+            x = torch.nn.functional.dropout(x, training=self.training)
+            x = self.conv2(x, edge_index, edge_attr=edge_attr)
+            x = x.relu()
+            x = torch.nn.functional.dropout(x, training=self.training)
+            x = self.conv3(x, edge_index, edge_attr=edge_attr)
 
 
         #converts batch (which is apparently a merged graph of all the indivudal graphs in batch) back into regular format with batch_size x outs
-        if batch_mapping is None:
-            x = global_mean_pool(x, batch=None)
+
+        if self.is_node_classification:
+            x = x
         else:
-            x = global_mean_pool(x, batch_mapping)
+            if batch_mapping is None:
+                x = global_mean_pool(x, batch=None)
+            else:
+                x = global_mean_pool(x, batch_mapping)
 
         x = self.lin(x)
         if self.n_classes == 1:
             return x
         else:
             return torch.nn.functional.softmax(x, dim=1)
+
+
+class CloneNet(torch.nn.Module):
+    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=38, h_dim=64, n_layers=1, n_heads=4, do_embedding=False, is_node_classification=False):
+        super().__init__()
+        self.lin0 = torch.nn.Linear(n_features, h_dim)
+
+        nn = torch.nn.Sequential(Linear(5, 128), ReLU(), Linear(128, h_dim * h_dim))
+        self.conv = NNConv(h_dim, h_dim, nn, aggr='mean')
+        self.gru = GRU(h_dim, h_dim)
+
+        self.set2set = Set2Set(h_dim, processing_steps=3)
+        self.lin1 = torch.nn.Linear(2 * h_dim, h_dim)
+        self.lin2 = torch.nn.Linear(h_dim, 1)
+
+    def forward(self, x, edge_index, batch, edge_attr):
+        out = torch.nn.functional.relu(self.lin0(x))
+        h = out.unsqueeze(0)
+
+        for i in range(3):
+            if edge_attr is None:
+                m = torch.nn.functional.relu(self.conv(out, edge_index))
+            else:
+                m = torch.nn.functional.relu(self.conv(out, edge_index, edge_attr))
+            out, h = self.gru(m.unsqueeze(0), h)
+            out = out.squeeze(0)
+
+        out = self.set2set(out, batch)
+        out = torch.nn.functional.relu(self.lin1(out))
+        out = self.lin2(out)
+        return out.view(-1)

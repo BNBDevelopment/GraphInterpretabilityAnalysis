@@ -156,8 +156,9 @@ def doROAR(model, configuration, roar_train_data, roar_test_data):
     device = torch.device("cpu")
     loss_fn = configuration['loss_fn']
     do_embedding = configuration['do_embedding']
+    inc = configuration['is_node_classification']
     #mlp = mlp.to(device)
-    mlp = TransformerConv2(in_channels, num_classes, h_dim=32, n_layers=1, n_heads=2, do_embedding=do_embedding).to(device)
+    mlp = TransformerConv2(in_channels, num_classes, h_dim=32, n_layers=1, n_heads=2, do_embedding=do_embedding, is_node_classification=inc).to(device)
     mlp = mlp.to(device)
 
 
@@ -189,12 +190,12 @@ def doROAR(model, configuration, roar_train_data, roar_test_data):
         test_batch = test_batch.to(device)
         pred = mlp(x=test_batch.x, edge_index=test_batch.edge_index, batch_mapping=test_batch.batch)
 
-        total += len(test_batch)
+        total += test_batch.y.shape[0]
         if configuration['n_classes'] == 1:
             test_mse += sum(pred).item()
         else:
             pred = pred.argmax(-1)
-            correct += (pred == test_batch.y).sum().item()
+            correct += (pred == test_batch.y.argmax(-1)).sum().item()
 
     if configuration['n_classes'] == 1:
         mse = test_mse / total
