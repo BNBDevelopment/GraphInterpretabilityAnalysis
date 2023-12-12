@@ -1,7 +1,8 @@
 import torch
 import torch_geometric
-from torch_geometric.datasets import MNISTSuperpixels, QM7b, GNNBenchmarkDataset, PPI, ZINC
+from torch_geometric.datasets import MNISTSuperpixels, QM7b, GNNBenchmarkDataset, PPI, ZINC, MoleculeNet
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import Cartesian
 
 
 def get_dataset(path, ds_choice, device):
@@ -16,14 +17,25 @@ def get_dataset(path, ds_choice, device):
     do_embedding = False
 
     if ds_choice == 'benchmark':
-        train_dataset = GNNBenchmarkDataset(path, name='PATTERN', split='train')
-        val_dataset = GNNBenchmarkDataset(path, name='PATTERN', split='val')
-        test_dataset = GNNBenchmarkDataset(path, name='PATTERN', split='test')
+        ds = MoleculeNet(path, name='ClinTox')
+
+        n_train = round(len(ds) * 0.8)
+        n_val = round(len(ds) * 0.1)
+
+        ds.x = ds.x.to(torch.float32)
+
+        train_dataset = ds[:n_train]
+        val_dataset = ds[n_train:n_train+n_val]
+        test_dataset = ds[n_train+n_val:]
 
         b_size = 32
+        n_features = train_dataset.num_features
+        n_classes = train_dataset.num_classes
+        do_embedding = False
 
     elif ds_choice == 'mnist':
-        train_dataset = MNISTSuperpixels(path, train=True)
+        transform = Cartesian(cat=False)
+        train_dataset = MNISTSuperpixels(path, train=True, transform=transform)
         val_start = round(len(train_dataset) * (1 - val_percent))
 
         val_dataset = train_dataset[val_start:]
