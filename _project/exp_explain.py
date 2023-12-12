@@ -6,12 +6,9 @@ def generate_roar_training_data(val_dl, explainer, device):
     roar_training_data = []
     for data in tqdm(val_dl, unit="batch", total=len(val_dl)):
         data = data.to(device)
-        try:
-            explanation = explainer(data.x, data.edge_index)
-            sub_graph = explanation.get_explanation_subgraph()
-            roar_training_data.append(sub_graph)
-        except:
-            pass
+        explanation = explainer(data.x, data.edge_index)
+        sub_graph = explanation.get_explanation_subgraph()
+        roar_training_data.append(sub_graph)
     return roar_training_data
 
 def pick_explainer(name, model, topk=3, mode_type='multiclass_classification', return_type='log_probs'):
