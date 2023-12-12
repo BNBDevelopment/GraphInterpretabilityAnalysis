@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 
 def train(model, configuration):
+    model.train()
     n_epochs = configuration['n_epochs']
     optimizer = configuration['optimizer']
     #data = configuration['data']
@@ -15,7 +16,10 @@ def train(model, configuration):
     val_dl = configuration['val_data']
 
     max_trn_acc = 0
-    max_val_acc = 0
+    if configuration['save_strategy'] == "max_val_acc":
+        val_criteria = 0
+    else:
+        val_criteria = 99999999
     old_save_path = ""
 
     for epoch in range(1, n_epochs+1):
@@ -52,17 +56,56 @@ def train(model, configuration):
 
 
         val_acc = val_count_correct/len(val_dl.dataset)
-        model_name = f"{configuration['model_name']}_{'dataset_name'}_Epoch_{epoch}_ValAcc_{val_acc}.pt"
+        avg_val_loss = val_loss / len(val_dl)
+
         model_save_path = configuration['model_save_path']
 
         if configuration['save_strategy'] == "max_val_acc":
-            if val_acc > max_val_acc:
-                print(f"Saving at epoch {epoch} with validation accuracy {val_acc} better than old validation accuracy {max_val_acc:.4f}")
+            model_name = f"{configuration['model_name']}_{'dataset_name'}_Epoch_{epoch}_ValAcc_{val_acc}.pt"
+            if val_acc > val_criteria:
+                print(f"Saving at epoch {epoch} with validation accuracy {val_acc} better than old validation accuracy {val_criteria:.4f}")
                 if os.path.exists(old_save_path):
                     os.remove(old_save_path)
-                max_val_acc = val_acc
+                val_criteria = val_acc
+                old_save_path = model_save_path + model_name
+                torch.save(model, model_save_path + model_name)
+        elif configuration['save_strategy'] == "min_val_loss":
+            model_name = f"{configuration['model_name']}_{'dataset_name'}_Epoch_{epoch}_ValLoss_{avg_val_loss}.pt"
+            if avg_val_loss < val_criteria:
+                print(f"Saving at epoch {epoch} with validation loss {avg_val_loss} better than old validation loss {val_criteria:.4f}")
+                if os.path.exists(old_save_path):
+                    os.remove(old_save_path)
+                val_criteria = avg_val_loss
                 old_save_path = model_save_path + model_name
                 torch.save(model, model_save_path + model_name)
 
 
     return train_loss, train_count_correct, val_loss, val_count_correct
+
+def test(model, configuration):
+    test_data = configuration['test_data']
+    device = configuration['device']
+
+    model.eval()
+    total = 0
+
+    test_mse = 0
+    correct = 0
+
+    for test_batch in test_data:
+        test_batch = test_batch.to(device)
+        pred = model(x=test_batch.x, edge_index=test_batch.edge_index, batch_mapping=test_batch.batch)
+
+        total += len(test_batch)
+        if configuration['n_classes'] == 1:
+            test_mse += sum(pred).item()
+        else:
+            pred = pred.argmax(-1)
+            correct += (pred == test_batch.y).sum().item()
+
+    if configuration['n_classes'] == 1:
+        mse = test_mse / total
+        print(f'Full Model Test MSE: {mse:.4f}')
+    else:
+        acc = correct / total
+        print(f'Full Model Test Accuracy: {acc:.4f}')

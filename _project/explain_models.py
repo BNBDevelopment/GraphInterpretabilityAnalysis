@@ -6,7 +6,7 @@ from torch.nn import Embedding
 
 class GCN(torch.nn.Module):
     def __init__(self, n_features, n_classes, h_dim=32):
-        super().__init__()
+        super().__init__(do_embedding=False)
         self.conv1 = GCNConv(n_features, h_dim)
         self.conv2 = GCNConv(h_dim, h_dim)
         self.conv3 = GCNConv(h_dim, h_dim)
@@ -32,7 +32,7 @@ class GCN(torch.nn.Module):
         return torch.nn.functional.softmax(x, dim=1)
 
 class GPS_Model(torch.nn.Module):
-    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=32, h_dim=32, n_layers=1, n_heads=4):
+    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=32, h_dim=32, n_layers=1, n_heads=4, do_embedding=False):
         super().__init__()
         assert n_layers >= 1, "Error: Must have at least one layer!"
 
@@ -85,7 +85,7 @@ class GPS_Model(torch.nn.Module):
 
 
 class Attention_Model(torch.nn.Module):
-    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=32, h_dim=32, n_layers=1, n_heads=4):
+    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=32, h_dim=32, n_layers=1, n_heads=4, do_embedding=False):
         super().__init__()
         assert n_layers >= 1, "Error: Must have at least one layer!"
 
@@ -119,7 +119,7 @@ class Attention_Model(torch.nn.Module):
 
 
 class AttentionConv_Model(torch.nn.Module):
-    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=32, h_dim=32, n_layers=1, n_heads=4):
+    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=32, h_dim=32, n_layers=1, n_heads=4, do_embedding=False):
         super().__init__()
         assert n_layers >= 1, "Error: Must have at least one layer!"
 
@@ -152,14 +152,26 @@ class AttentionConv_Model(torch.nn.Module):
 
 
 class TransformerConv2(torch.nn.Module):
-    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=32, h_dim=32, n_layers=1, n_heads=4):
+    def __init__(self, n_features, n_classes, embd_dim=16, n_embds=38, h_dim=32, n_layers=1, n_heads=4, do_embedding=False):
         super().__init__()
-        self.conv1 = TransformerConv(in_channels=n_features, out_channels=h_dim//2, heads=n_heads)
+
+        self.do_embedding = do_embedding
+        self.n_classes = n_classes
+        if self.do_embedding:
+            self.embed = Embedding(n_embds, embd_dim)
+            self.conv1 = TransformerConv(in_channels=embd_dim, out_channels=h_dim // 2, heads=n_heads)
+        else:
+            self.conv1 = TransformerConv(in_channels=n_features, out_channels=h_dim // 2, heads=n_heads)
+
         self.conv2 = TransformerConv(in_channels=(h_dim//2)*n_heads, out_channels=h_dim//2, heads=n_heads)
         self.conv3 = TransformerConv(in_channels=(h_dim//2)*n_heads, out_channels=h_dim//2, heads=n_heads)
         self.lin = torch.nn.Linear((h_dim//2)*n_heads, n_classes)
 
+
+
     def forward(self, x, edge_index, batch_mapping=None, edge_attr=None):
+        if self.do_embedding:
+            x = self.embed(x).squeeze()
         x = self.conv1(x, edge_index)
         x = x.relu()
         x = torch.nn.functional.dropout(x, training=self.training)
@@ -176,4 +188,7 @@ class TransformerConv2(torch.nn.Module):
             x = global_mean_pool(x, batch_mapping)
 
         x = self.lin(x)
-        return torch.nn.functional.softmax(x, dim=1)
+        if self.n_classes == 1:
+            return x
+        else:
+            return torch.nn.functional.softmax(x, dim=1)

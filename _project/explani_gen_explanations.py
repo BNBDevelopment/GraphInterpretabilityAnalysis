@@ -12,7 +12,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import MLP, global_mean_pool
 from tqdm import tqdm
 
-from _project.explain_models import GPS_Model
+from _project.explain_models import GPS_Model, TransformerConv2
 
 
 def get_explainer(method_type, model, configuration):
@@ -68,10 +68,11 @@ def get_explainer(method_type, model, configuration):
 
 def gen_explanations(method_type, model, configuration, data_to_explain, n_explanations=1, roar_test_data=None, image_every=200, force_createData=False):
     # data = data_to_explain.dataset.data#configuration['data']
+    model.eval()
 
     device = next(model.parameters()).device
-    if os.path.isfile(f"{type(model).__name__}_{method_type}_ALL_DATA.pt") and not force_createData:
-        load_file = open(f"{type(model).__name__}_{method_type}_ALL_DATA.pt", "rb")
+    if os.path.isfile(f"{type(model).__name__}_{method_type}_{configuration['dataset_name']}_ALL_DATA.pt") and not force_createData:
+        load_file = open(f"{type(model).__name__}_{method_type}_{configuration['dataset_name']}_ALL_DATA.pt", "rb")
         loaded_data = pickle.load(load_file)
         load_file.close()
         roar_train_samples = []
@@ -80,8 +81,10 @@ def gen_explanations(method_type, model, configuration, data_to_explain, n_expla
 
         for v in loaded_data:
             roar_train_samples.append(v['subgraph'])
-            node_importances.append(v['node_importances'])
-            node_importances.append(v['edge_importances'])
+            if 'node_importances' in v.keys():
+                node_importances.append(v['node_importances'])
+            if 'edge_importances' in v.keys():
+                node_importances.append(v['edge_importances'])
 
     else:
         roar_train_samples = []
@@ -105,13 +108,18 @@ def gen_explanations(method_type, model, configuration, data_to_explain, n_expla
 
             #transform_subsetFromMask = torch_geometric.transforms.Compose([])
             explanation = explainer(x=data.x, edge_index=data.edge_index, batch_mapping=data.batch)
+            sub_graph = explanation.get_explanation_subgraph()
+            sub_graph.y = data.y
+            datapoint = {'subgraph': sub_graph}
 
-            binary_node_mask = explanation.node_mask.squeeze() != 0
-            binary_edge_mask = explanation.edge_mask.squeeze() != 0
-
-            sub_graph = explanation.subgraph(binary_node_mask)
-
-            datapoint = {'subgraph':sub_graph, 'node_importances':explanation.node_mask, 'edge_importances':explanation.edge_mask}
+            if 'node_mask' in explanation.available_explanations:
+                # binary_node_mask = explanation.node_mask.squeeze() != 0
+                # sub_graph = explanation.subgraph(binary_node_mask)
+                datapoint['node_importances'] = explanation.node_masks
+                roar_train_samples.append(datapoint)
+            if 'edge_mask' in explanation.available_explanations:
+                #binary_edge_mask = explanation.edge_mask.squeeze() != 0
+                datapoint['edge_importances'] = explanation.edge_mask
             roar_train_samples.append(datapoint)
 
             if idx_to_explain % image_every == 0:
@@ -123,6 +131,9 @@ def gen_explanations(method_type, model, configuration, data_to_explain, n_expla
         pickle.dump(roar_train_samples, save_file)
         save_file.close()
 
+        # convert to list format
+        roar_train_samples = [x['subgraph'] for x in roar_train_samples]
+
     #Now Do ROAR strategy
     if not roar_test_data is None:
         doROAR(model, configuration, roar_train_samples, roar_test_data)
@@ -132,6 +143,7 @@ def gen_explanations(method_type, model, configuration, data_to_explain, n_expla
 
 
 def doROAR(model, configuration, roar_train_data, roar_test_data):
+    model.eval()
     num_classes = configuration['n_classes']
     in_channels = configuration['n_features']
     roar_epochs = configuration['roar_epochs']
@@ -142,39 +154,51 @@ def doROAR(model, configuration, roar_train_data, roar_test_data):
 
     #device = next(model.parameters()).device
     device = torch.device("cpu")
+    loss_fn = configuration['loss_fn']
+    do_embedding = configuration['do_embedding']
     #mlp = mlp.to(device)
-    mlp = GPS_Model(in_channels, num_classes, h_dim=32, n_layers=1, n_heads=2).to(device)
+    mlp = TransformerConv2(in_channels, num_classes, h_dim=32, n_layers=1, n_heads=2, do_embedding=do_embedding).to(device)
     mlp = mlp.to(device)
 
-    artificial_batch_index = torch.zeros(roar_train_data[0].x.shape[0]).to(torch.int64).to(device)
+
     optimizer = torch.optim.Adam(mlp.parameters(), lr=0.0001, weight_decay=5e-4)
 
     for epoch in range(roar_epochs):
         epochloss = 0
-        for single_data_item in roar_train_data:
+        for single_data_item in tqdm(roar_train_data, unit="batch", total=len(roar_train_data)):
             optimizer.zero_grad()
             x = single_data_item.x.to(device)
             e = single_data_item.edge_index.to(device)
+            artificial_batch_index = torch.zeros(x.shape[0]).to(torch.int64).to(device)
+
             out = mlp(x=x, edge_index=e, batch_mapping=artificial_batch_index)
             #out = global_mean_pool(out, batch=None)
             #out = torch.nn.functional.softmax(out, dim=1)
 
             y = torch.nn.functional.one_hot(single_data_item.target, num_classes=num_classes).to(torch.float).to(device)
-            loss = torch.nn.functional.binary_cross_entropy(input=out, target=y)
+            loss = loss_fn(input=out, target=y)
             loss.backward()
             optimizer.step()
             epochloss += loss.item()
-        print(f"average epochloss: {epochloss/len(roar_train_data)}")
+        print(f"ROAR average epoch {epoch} loss: {epochloss/len(roar_train_data)}")
     model.eval()
     correct = 0
     total = 0
+    test_mse = 0
     for test_batch in roar_test_data:
         test_batch = test_batch.to(device)
         pred = mlp(x=test_batch.x, edge_index=test_batch.edge_index, batch_mapping=test_batch.batch)
-        pred = pred.argmax(-1)
 
-        correct += (pred == test_batch.y).sum().item()
         total += len(test_batch)
+        if configuration['n_classes'] == 1:
+            test_mse += sum(pred).item()
+        else:
+            pred = pred.argmax(-1)
+            correct += (pred == test_batch.y).sum().item()
 
-    acc = correct / total
-    print(f'Accuracy: {acc:.4f}')
+    if configuration['n_classes'] == 1:
+        mse = test_mse / total
+        print(f'ROAR Test MSE: {mse:.4f}')
+    else:
+        acc = correct / total
+        print(f'ROAR Test Accuracy: {acc:.4f}')
