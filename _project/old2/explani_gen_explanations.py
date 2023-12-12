@@ -1,18 +1,13 @@
-import copy
 import os
 import pickle
 import shutil
 
 import torch
-import torch_geometric
-from matplotlib import pyplot as plt
 from torch_geometric.explain import Explainer, GraphMaskExplainer, GNNExplainer, AttentionExplainer
-import networkx as nx
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import MLP, global_mean_pool
 from tqdm import tqdm
 
-from _project.explain_models import GPS_Model, TransformerConv2
+from _project.old2.explain_models import TransformerConv2
 
 
 def get_explainer(method_type, model, configuration):

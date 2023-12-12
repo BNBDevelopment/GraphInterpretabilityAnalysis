@@ -1,23 +1,13 @@
 import os.path
 import os.path as osp
-from pathlib import Path
 
-import networkx as nx
 import torch
-import torch.nn.functional as F
-import torch_geometric
-from matplotlib import pyplot as plt
 from torch_geometric import seed_everything
 
-from torch_geometric.datasets import Planetoid, QM7b, PPI, GNNBenchmarkDataset, MNISTSuperpixels
-from torch_geometric.explain import Explainer, GraphMaskExplainer, GNNExplainer
-from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GATConv, GCNConv
-
-from _project.explain_data import get_dataset
-from _project.explain_models import GCN, GPS_Model, AttentionConv_Model, TransformerConv2, CloneNet
-from _project.explain_train import train, test
-from _project.explani_gen_explanations import gen_explanations
+from _project.old2.explain_data import get_dataset
+from _project.old2.explain_models import GCN, GPS_Model, AttentionConv_Model, TransformerConv2, CloneNet
+from _project.old2.explain_train import train, test
+from _project.old2.explani_gen_explanations import gen_explanations
 
 
 def train_new_model(model_type, configuration, n_features, n_classes, do_embedding, is_node_classification, lr):
@@ -122,7 +112,7 @@ def run_experiment(model_name, ds_choice, model_type, lr, weight_decay, b_size, 
 
 ######################################################################################################
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-path = osp.join(osp.dirname(osp.realpath(__file__)), 'data', 'Planetoid')
+path = osp.join(osp.dirname(osp.realpath(__file__)), '../data', 'Planetoid')
 
 seed_everything(seed=12345)
 lr = 0.00002
