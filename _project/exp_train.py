@@ -181,19 +181,42 @@ def compare_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y_type
 
 
 
-def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr):
+def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr, device):
     for epoch in range(1, num_epochs+1):
         epoch_loss = 0
         val_epoch_loss = 0
+
+        gsatmodel.extractor.train()
+        gsatmodel.clf.train()
         for data in tqdm(train_dl, unit="batch", total=len(train_dl)):
             data = process_data(data, use_edge_attr)
+            data.edge_attr = data.edge_attr.to(torch.float32)
+            data.y = data.y.argmax(-1).unsqueeze(dim=-1)
 
-            gsatmodel.extractor.train()
-            gsatmodel.clf.train()
+            try:
+                att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=True)
+                gsatmodel.optimizer.zero_grad()
+                loss.backward()
+                gsatmodel.optimizer.step()
 
-            att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data, epoch, training=True)
-            gsatmodel.optimizer.zero_grad()
-            loss.backward()
-            gsatmodel.optimizer.step()
-            return att.data.cpu().reshape(-1), loss_dict, clf_logits.data.cpu()
+                epoch_loss += loss.item()
+            except Exception as e:
+                print("Error in training")
+                pass
+
+        gsatmodel.extractor.eval()
+        gsatmodel.clf.eval()
+        for data in tqdm(val_dl, unit="batch", total=len(val_dl)):
+            data = process_data(data, use_edge_attr)
+            data.edge_attr = data.edge_attr.to(torch.float32)
+            data.y = data.y.argmax(-1).unsqueeze(dim=-1)
+
+            try:
+                att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=False)
+                val_epoch_loss += loss.item()
+            except:
+                print("error in validation")
+                pass
+
+    return gsatmodel
 

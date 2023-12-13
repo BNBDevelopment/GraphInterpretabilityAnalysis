@@ -1,5 +1,8 @@
+import torch
 from torch_geometric.explain import Explainer, GNNExplainer, AttentionExplainer
 from tqdm import tqdm
+
+from utils import process_data
 
 
 def generate_roar_training_data(val_dl, explainer, device):
@@ -47,3 +50,19 @@ def pick_explainer(name, model, topk=3, mode_type='multiclass_classification', r
         )
 
     return explainer
+
+
+def generate_gsat_roar_training_data(val_dl, explainer, device, use_edge_attr):
+    roar_training_data = []
+    for data in tqdm(val_dl, unit="batch", total=len(val_dl)):
+        data = data.to(device)
+        data = process_data(data, use_edge_attr)
+        data.edge_attr = data.edge_attr.to(torch.float32)
+        data.y = data.y.argmax(-1).unsqueeze(dim=-1)
+
+        torch.set_grad_enabled(True)
+        explanation = explainer(data.x, data.edge_index, target=None, index=None, fulldata=data)
+        sub_graph = explanation.get_explanation_subgraph()
+        roar_training_data.append(sub_graph)
+
+    return roar_training_data
