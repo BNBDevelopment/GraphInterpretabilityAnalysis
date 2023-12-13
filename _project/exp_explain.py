@@ -60,9 +60,13 @@ def generate_gsat_roar_training_data(val_dl, explainer, device, use_edge_attr):
         data.edge_attr = data.edge_attr.to(torch.float32)
         data.y = data.y.argmax(-1).unsqueeze(dim=-1)
 
-        torch.set_grad_enabled(True)
-        explanation = explainer(data.x, data.edge_index, target=None, index=None, fulldata=data)
-        sub_graph = explanation.get_explanation_subgraph()
-        roar_training_data.append(sub_graph)
+        try:
+            torch.set_grad_enabled(True)
+            explanation = explainer(data.x, data.edge_index, batch=data.batch, edge_attr=data.edge_attr)
+            sub_graph = explanation.get_explanation_subgraph()
+            roar_training_data.append(sub_graph)
+        except:
+            print("Failure in GSAT training data generation")
+            pass
 
     return roar_training_data

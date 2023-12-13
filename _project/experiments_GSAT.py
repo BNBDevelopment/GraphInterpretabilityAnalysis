@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from _project.exp_data import getBinaryClassifier, getQM7b, getZINC, getPPI, getMNIST
 from _project.exp_explain import pick_explainer, generate_roar_training_data, generate_gsat_roar_training_data
-from _project.exp_train import trainAndValidate, compare_orig_roar, trainAndValidateGSAT
+from _project.exp_train import trainAndValidate, compare_orig_roar, trainAndValidateGSAT, compare_GSAT_orig_roar
 from example.gsat import GSAT
 from example.trainer import run_one_epoch
 from exp_models import Model_BinClassifier, Model_Regressor, Model_PPI
@@ -20,7 +20,7 @@ from GSAT.src.utils import get_model
 from GSAT.src.run_gsat import ExtractorMLP
 
 from GSAT.src.utils import Criterion
-from utils import reorder_like
+from utils import reorder_like, process_data
 
 
 class model_wrapper(torch.nn.Module):
@@ -163,14 +163,35 @@ def run_experiments(dl="binary", TOPK=3):
 
     print(f"starting ROAR for: {exp_type}")
 
-    wrapped_model = model_wrapper(orig_model)
+    #wrapped_model = model_wrapper(orig_model)
+    wrapped_model = orig_model.clf
     explainer = pick_explainer(exp_type, wrapped_model, topk=TOPK, mode_type=mode_type, return_type=return_type)
 
     roar_training_data = generate_gsat_roar_training_data(val_dl, explainer, device, use_edge_attr)
 
-    roar_model = trainAndValidateGSAT(roar_model, roar_training_data, None, roar_epochs, use_edge_attr, device)
+    #roar_model = trainAndValidateGSAT(roar_model, roar_training_data, None, roar_epochs, use_edge_attr, device, mod_y=False)
+    for epoch in range(1, roar_epochs+1):
+        epoch_loss = 0
+        val_epoch_loss = 0
 
-    compare_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y_type)
+        roar_model.clf.train()
+        for data in tqdm(train_dl, unit="batch", total=len(train_dl)):
+            data = process_data(data, use_edge_attr)
+            data.edge_attr = data.edge_attr.to(torch.float32)
+
+            try:
+                att, loss, loss_dict, clf_logits = roar_model.clf(x=data.x, edge_index=data.edge_index, batch=data.batch, edge_attr=data.edge_attr)
+                roar_model.optimizer.zero_grad()
+                loss.backward()
+                roar_model.optimizer.step()
+
+                epoch_loss += loss.item()
+            except Exception as e:
+                print("Error in training")
+                pass
+
+
+    compare_GSAT_orig_roar(orig_model.clf, roar_model.clf, test_dl, device, torch.nn.functional.mse_loss, y_fmt, y_type, use_edge_attr)
 
 
 run_experiments("binary", TOPK=2)
