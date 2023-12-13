@@ -1,10 +1,10 @@
 import math
 
 import torch
+from sklearn.metrics import f1_score
 from tqdm import tqdm
 
-
-
+from src.utils import process_data
 
 
 def calc_loss(data, out, loss_fn, y_fmt, y_type):
@@ -13,7 +13,7 @@ def calc_loss(data, out, loss_fn, y_fmt, y_type):
 
     if data.y is None:
         if y_fmt == "argmax":
-            loss = loss_fn(out, data.target.argmax(-1).to(y_type))
+            loss = loss_fn(out, data.target.to(y_type))
         else:
             loss = loss_fn(out, data.target.to(y_type))
     else:
@@ -25,15 +25,18 @@ def calc_loss(data, out, loss_fn, y_fmt, y_type):
 
 
 
-def count_correct(data, y, raw_prediction):
-    if len(data.y.shape) > 1 and data.y.shape[1] > 1:
+def count_correct(data, y, raw_prediction, y_fmt):
+    if y_fmt == 'argmax':
+        y = y.argmax(-1)
+
+    if len(y.shape) > 1 and y.shape[1] > 1:
         #raw_prediction = raw_prediction.transpose(1,2)
         where_matches = raw_prediction.argmax(-1) == y
         matches = where_matches.sum().item()
         return matches, math.prod(list(y.shape))
     else:
-        actual = y.argmax(-1)
-        if raw_prediction == actual:
+       # actual = y.argmax(-1)
+        if raw_prediction.argmax(-1) == y:
             return 1, 1
         else:
             return 0, 1
@@ -50,31 +53,55 @@ def trainAndValidate(model, train_dl, val_dl, num_epochs, optimizer, device, los
             data = data.to(device)
             optimizer.zero_grad()
             out = model(data.x, data.edge_index, data.batch)
-            loss = calc_loss(data, out, loss_fn, y_fmt, y_type=y_type)
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
+            try:
+                loss = calc_loss(data, out, loss_fn, y_fmt, y_type=y_type)
+                loss.backward()
+                optimizer.step()
+                if not torch.isnan(loss):
+                    epoch_loss += loss.item()
+            except Exception as e:
+                print("Error in training")
+                pass
 
         if not val_dl is None:
             val_loss = 0
             val_total = 0
             val_correct = 0
+            val_ys = []
+            val_preds = []
+            score_model = 0
+
             model.eval()
             for data in tqdm(val_dl, unit="batch", total=len(val_dl)):
                 data = data.to(device)
 
-                out = model(data.x, data.edge_index, data.batch)
-                #loss = loss_fn(out, data.y.argmax(-1))
-                loss = calc_loss(data, out, loss_fn, y_fmt, y_type=y_type)
-                val_epoch_loss += loss.item()
+                try:
+                    out = model(data.x, data.edge_index, data.batch)
+                    #loss = loss_fn(out, data.y.argmax(-1))
+                    loss = calc_loss(data, out, loss_fn, y_fmt, y_type=y_type)
+                    val_epoch_loss += loss.item()
+
+                    plus_val, plus_total = count_correct(data, data.y, raw_prediction=out, y_fmt=y_fmt)
+                    val_total += plus_total
+                    val_correct += plus_val
+
+                    val_pr = out.argmax(-1)
+                    val_ys.append(data.y.flatten().cpu())
+                    val_preds.append(val_pr.flatten().cpu())
+                except Exception as e:
+                    print("Error vlaidation")
+                    pass
 
 
-                plus_val, plus_total = count_correct(data, data.y, raw_prediction=out)
-                val_total += plus_total
-                val_correct += plus_val
+            try:
+                f1_y = torch.cat(val_ys, dim=0).numpy()
+                f1_model = torch.cat(val_preds, dim=0).numpy()
+                score_model = f1_score(f1_y, f1_model, average='micro')
+            except:
+                pass
 
 
-            print(f"Epoch {epoch}/{num_epochs} train loss: {epoch_loss/len(train_dl)} val loss: {val_epoch_loss/len(val_dl)}  val_acc:{val_correct/val_total}")
+            print(f"Epoch {epoch}/{num_epochs} train loss: {epoch_loss/len(train_dl)} val loss: {val_epoch_loss/len(val_dl)}  val_acc:{val_correct/val_total}  val f1: {score_model}")
         else:
             print(
                 f"Epoch {epoch}/{num_epochs} train loss: {epoch_loss / len(train_dl)}")
@@ -93,17 +120,19 @@ def compare_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y_type
     roar_model_loss = 0
     total = 0
 
+    ys = []
+    model_preds = []
+    roar_preds = []
+
+
     for data in tqdm(test_dl, unit="batch", total=len(test_dl)):
         data = data.to(device)
         modl_out = model(data.x, data.edge_index, data.batch)
         roar_out = roar_model(data.x, data.edge_index, data.batch)
 
-        # modl_pred = modl_out.argmax(-1)
-        # roar_pred = roar_out.argmax(-1)
-
         total += data.y.shape[0]
-        orig_new_correct, new_o_total = count_correct(data, data.y, raw_prediction=modl_out)
-        roar_new_correct, new_r_total = count_correct(data, data.y, raw_prediction=roar_out)
+        orig_new_correct, new_o_total = count_correct(data, data.y, raw_prediction=modl_out, y_fmt=y_fmt)
+        roar_new_correct, new_r_total = count_correct(data, data.y, raw_prediction=roar_out, y_fmt=y_fmt)
         orig_model_correct += orig_new_correct
         roar_model_correct += roar_new_correct
         o_total += new_o_total
@@ -126,5 +155,45 @@ def compare_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y_type
         orig_model_loss += model_loss.item()
         roar_model_loss += roar_loss.item()
 
+        modl_pred = modl_out.argmax(-1)
+        roar_pred = roar_out.argmax(-1)
+        ys.append(data.y.flatten().cpu())
+        model_preds.append(modl_pred.flatten().cpu())
+        roar_preds.append(roar_pred.flatten().cpu())
+
+
+
     print(f"Original Model accuracy: {orig_model_correct / o_total} \t\t Roar Model accuracy: {roar_model_correct / r_total}")
     print(f"Original Model loss: {orig_model_loss / total} \t\t Roar Model loss: {roar_model_loss / total}")
+
+    try:
+        f1_y = torch.cat(ys, dim=0).numpy()
+        f1_model = torch.cat(model_preds, dim=0).numpy()
+        f1_roar = torch.cat(roar_preds, dim=0).numpy()
+        score_model = f1_score(f1_y, f1_model, average='micro')
+        score_roar = f1_score(f1_y, f1_roar, average='micro')
+
+        print(f"Original Model F1: {score_model} \t\t Roar Model F1: {score_roar}")
+    except:
+        print("error calculating final f1")
+        pass
+
+
+
+
+def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr):
+    for epoch in range(1, num_epochs+1):
+        epoch_loss = 0
+        val_epoch_loss = 0
+        for data in tqdm(train_dl, unit="batch", total=len(train_dl)):
+            data = process_data(data, use_edge_attr)
+
+            gsatmodel.extractor.train()
+            gsatmodel.clf.train()
+
+            att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data, epoch, training=True)
+            gsatmodel.optimizer.zero_grad()
+            loss.backward()
+            gsatmodel.optimizer.step()
+            return att.data.cpu().reshape(-1), loss_dict, clf_logits.data.cpu()
+

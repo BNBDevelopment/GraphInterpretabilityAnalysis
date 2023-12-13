@@ -1,12 +1,19 @@
 import torch
 import torch_geometric
-from torch_geometric.datasets import MoleculeNet, QM7b, ZINC, PPI
+from torch_geometric.datasets import MoleculeNet, QM7b, ZINC, PPI, MNISTSuperpixels
 from torch_geometric.loader import DataLoader
-from torch_geometric.transforms import Distance
+from torch_geometric.transforms import Distance, Cartesian
 
 
 def getBinaryClassifier(batch_size):
     ds = MoleculeNet("data/binclass", name='ClinTox')
+    #bad_idxs = []
+    # for idx, item in enumerate(ds):
+    #     if 0 in item.x.shape:
+    #         bad_idxs.append(idx)
+    # for i in sorted(bad_idxs, reverse=True):
+    #     ds[i] = ds[i-3]
+
     n_train = round(len(ds) * 0.8)
     n_val = round(len(ds) * 0.1)
     ds.x = ds.x.to(torch.float32)
@@ -81,5 +88,24 @@ def getPPI(batch_size):
     train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(val_dataset, batch_size=1, shuffle=True)
     test_dl = DataLoader(test_dataset, batch_size=1, shuffle=True)
+
+    return train_dl, val_dl, test_dl, num_features, num_classes
+
+def getMNIST(batch_size):
+    transform = Cartesian(cat=False)
+    train_dataset = MNISTSuperpixels("data/mnist", train=True, transform=transform)
+    val_percent = 0.1
+    val_start = round(len(train_dataset) * (1 - val_percent))
+
+    val_dataset = train_dataset[val_start:]
+    train_dataset = train_dataset[:val_start]
+    test_dataset = MNISTSuperpixels("data/mnist", train=False)
+
+    train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dl = DataLoader(val_dataset, batch_size=1, shuffle=True)
+    test_dl = DataLoader(test_dataset, batch_size=1, shuffle=True)
+
+    num_features = train_dataset.num_features
+    num_classes = train_dataset.num_classes
 
     return train_dl, val_dl, test_dl, num_features, num_classes
