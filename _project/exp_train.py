@@ -215,8 +215,8 @@ def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr,
                 data.y = data.y.argmax(-1).unsqueeze(dim=-1)
 
             try:
-                att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=True)
                 gsatmodel.optimizer.zero_grad()
+                att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=True)
                 loss.backward()
                 gsatmodel.optimizer.step()
 

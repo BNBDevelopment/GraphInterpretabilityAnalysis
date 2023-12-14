@@ -1,7 +1,7 @@
 import pickle
 
 import torch
-from torch.nn import BCELoss, CrossEntropyLoss, Linear
+from torch.nn import BCELoss, CrossEntropyLoss, Linear, MSELoss
 from torch_geometric.datasets import MoleculeNet
 from torch_geometric.explain import Explainer, GNNExplainer, AttentionExplainer
 from torch_geometric.loader import DataLoader
@@ -84,7 +84,9 @@ def create_gsat_model(num_features, n_edge_attr, num_classes, is_multilabel, mod
     return model
 
 def run_experiments(dl="binary", TOPK=3):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
+
     batch_size = 32
     #num_epochs = 20
     num_epochs = 1
@@ -109,6 +111,7 @@ def run_experiments(dl="binary", TOPK=3):
         mode_type = 'multiclass_classification'
         return_type = 'log_probs'
         y_type = torch.long
+        roar_loss_fn = MSELoss()
 
     if dl == "zinc":
         train_dl, val_dl, test_dl, num_features, num_classes = getZINC(batch_size)
@@ -124,6 +127,7 @@ def run_experiments(dl="binary", TOPK=3):
         mode_type = 'regression'
         return_type = 'raw'
         y_type = torch.float32
+        roar_loss_fn = MSELoss()
 
     if dl == "ppi":
         train_dl, val_dl, test_dl, num_features, num_classes = getPPI(2)
@@ -139,6 +143,7 @@ def run_experiments(dl="binary", TOPK=3):
         mode_type = 'multiclass_classification'
         return_type = 'probs'
         y_type = torch.long
+        roar_loss_fn = CrossEntropyLoss()
 
     if dl == "mnist":
         train_dl, val_dl, test_dl, num_features, num_classes = getMNIST(128)
@@ -154,6 +159,7 @@ def run_experiments(dl="binary", TOPK=3):
         mode_type = 'multiclass_classification'
         return_type = 'log_probs'
         y_type = torch.long
+        roar_loss_fn = CrossEntropyLoss()
 
 
     orig_model = orig_model.to(device)
@@ -178,10 +184,13 @@ def run_experiments(dl="binary", TOPK=3):
         for data in tqdm(train_dl, unit="batch", total=len(train_dl)):
             data = process_data(data, use_edge_attr)
             data.edge_attr = data.edge_attr.to(torch.float32)
+            data = data.to(device)
+            roar_model.optimizer.zero_grad()
 
             try:
-                att, loss, loss_dict, clf_logits = roar_model.clf(x=data.x, edge_index=data.edge_index, batch=data.batch, edge_attr=data.edge_attr)
-                roar_model.optimizer.zero_grad()
+                clf_logits = roar_model.clf(x=data.x, edge_index=data.edge_index, batch=data.batch, edge_attr=data.edge_attr)
+
+                loss = roar_loss_fn(clf_logits, data.y.argmax(-1).to(torch.float32))
                 loss.backward()
                 roar_model.optimizer.step()
 
@@ -191,7 +200,7 @@ def run_experiments(dl="binary", TOPK=3):
                 pass
 
 
-    compare_GSAT_orig_roar(orig_model.clf, roar_model.clf, test_dl, device, torch.nn.functional.mse_loss, y_fmt, y_type, use_edge_attr)
+    compare_GSAT_orig_roar(orig_model.clf, roar_model.clf, test_dl, device, roar_loss_fn, y_fmt, y_type, use_edge_attr)
 
 
 run_experiments("binary", TOPK=2)
