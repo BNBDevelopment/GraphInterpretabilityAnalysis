@@ -99,7 +99,7 @@ def getMNIST(batch_size):
 
     val_dataset = train_dataset[val_start:]
     train_dataset = train_dataset[:val_start]
-    test_dataset = MNISTSuperpixels("data/mnist", train=False)
+    test_dataset = MNISTSuperpixels("data/mnist", train=False, transform=transform)
 
     train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(val_dataset, batch_size=1, shuffle=True)

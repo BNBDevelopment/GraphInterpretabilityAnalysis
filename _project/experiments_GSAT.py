@@ -84,14 +84,14 @@ def create_gsat_model(num_features, n_edge_attr, num_classes, is_multilabel, mod
     return model
 
 def run_experiments(dl="binary", TOPK=3):
-    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device('cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    #device = torch.device('cpu')
 
     batch_size = 32
     #num_epochs = 20
-    num_epochs = 1
+    num_epochs = 25
     #roar_epochs = 5
-    roar_epochs = 1
+    roar_epochs = 25
 
     orig_lr = 0.001
     roar_lr = 0.001
@@ -112,6 +112,7 @@ def run_experiments(dl="binary", TOPK=3):
         return_type = 'log_probs'
         y_type = torch.long
         roar_loss_fn = MSELoss()
+        mod_y = True
 
     if dl == "zinc":
         train_dl, val_dl, test_dl, num_features, num_classes = getZINC(batch_size)
@@ -119,7 +120,8 @@ def run_experiments(dl="binary", TOPK=3):
         n_edge_attr = train_dl.dataset[0].edge_attr.shape[-1]
         model_config = {'model_name': 'GIN', 'hidden_size': 64, 'n_layers': 2, 'dropout_p': 0.3, 'use_edge_attr': use_edge_attr}
         is_multilabel = False
-
+        mod_y = False
+        num_classes = 1
         orig_model = create_gsat_model(num_features, n_edge_attr, num_classes, is_multilabel, model_config, device)
         roar_model = create_gsat_model(num_features, n_edge_attr, num_classes, is_multilabel, model_config, device)
 
@@ -128,6 +130,7 @@ def run_experiments(dl="binary", TOPK=3):
         return_type = 'raw'
         y_type = torch.float32
         roar_loss_fn = MSELoss()
+        mod_y = False
 
     if dl == "ppi":
         train_dl, val_dl, test_dl, num_features, num_classes = getPPI(2)
@@ -144,6 +147,7 @@ def run_experiments(dl="binary", TOPK=3):
         return_type = 'probs'
         y_type = torch.long
         roar_loss_fn = CrossEntropyLoss()
+        mod_y = False
 
     if dl == "mnist":
         train_dl, val_dl, test_dl, num_features, num_classes = getMNIST(128)
@@ -160,10 +164,11 @@ def run_experiments(dl="binary", TOPK=3):
         return_type = 'log_probs'
         y_type = torch.long
         roar_loss_fn = CrossEntropyLoss()
+        mod_y = False
 
 
     orig_model = orig_model.to(device)
-    orig_model = trainAndValidateGSAT(orig_model, train_dl, val_dl, num_epochs, use_edge_attr, device)
+    orig_model = trainAndValidateGSAT(orig_model, train_dl, val_dl, num_epochs, use_edge_attr, device, mod_y)
 
     exp_type = "gnn"
 
@@ -174,6 +179,13 @@ def run_experiments(dl="binary", TOPK=3):
     explainer = pick_explainer(exp_type, wrapped_model, topk=TOPK, mode_type=mode_type, return_type=return_type)
 
     roar_training_data = generate_gsat_roar_training_data(val_dl, explainer, device, use_edge_attr)
+    fopen = open(f"test_{dl}_roar_training_data_{exp_type}.pkl", "wb")
+    pickle.dump(roar_training_data, fopen)
+    fopen.close()
+
+    fopen = open(f"test_{dl}_roar_training_data_{exp_type}.pkl", "rb")
+    roar_training_data = pickle.load(fopen)
+    fopen.close()
 
     #roar_model = trainAndValidateGSAT(roar_model, roar_training_data, None, roar_epochs, use_edge_attr, device, mod_y=False)
     for epoch in range(1, roar_epochs+1):
@@ -181,7 +193,7 @@ def run_experiments(dl="binary", TOPK=3):
         val_epoch_loss = 0
 
         roar_model.clf.train()
-        for data in tqdm(train_dl, unit="batch", total=len(train_dl)):
+        for data in tqdm(roar_training_data, unit="batch", total=len(roar_training_data)):
             data = process_data(data, use_edge_attr)
             data.edge_attr = data.edge_attr.to(torch.float32)
             data = data.to(device)
@@ -190,7 +202,9 @@ def run_experiments(dl="binary", TOPK=3):
             try:
                 clf_logits = roar_model.clf(x=data.x, edge_index=data.edge_index, batch=data.batch, edge_attr=data.edge_attr)
 
-                loss = roar_loss_fn(clf_logits, data.y.argmax(-1).to(torch.float32))
+                if mod_y:
+                    data.y = data.y.argmax(-1).unsqueeze(dim=-1)
+                loss = roar_loss_fn(clf_logits, data.target)
                 loss.backward()
                 roar_model.optimizer.step()
 
@@ -203,7 +217,7 @@ def run_experiments(dl="binary", TOPK=3):
     compare_GSAT_orig_roar(orig_model.clf, roar_model.clf, test_dl, device, roar_loss_fn, y_fmt, y_type, use_edge_attr)
 
 
-run_experiments("binary", TOPK=2)
+#run_experiments("binary", TOPK=2)
 #run_experiments("mnist", TOPK=7)
-#run_experiments("zinc", TOPK=2)
+run_experiments("zinc", TOPK=2)
 #run_experiments("ppi", TOPK=120)

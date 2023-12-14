@@ -262,9 +262,11 @@ def compare_GSAT_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y
 
 
     for data in tqdm(test_dl, unit="batch", total=len(test_dl)):
-        data = data.to(device)
+
         data = process_data(data, use_edge_attr)
-        data.edge_attr = data.edge_attr.to(torch.float32)
+        if not data.edge_attr is None:
+            data.edge_attr = data.edge_attr.to(torch.float32)
+        data = data.to(device)
 
         modl_out = model(data.x, data.edge_index, data.batch, data.edge_attr)
         roar_out = roar_model(data.x, data.edge_index, data.batch, data.edge_attr)
