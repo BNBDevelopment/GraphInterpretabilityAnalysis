@@ -93,7 +93,7 @@ def run_experiments(dl="binary", TOPK=3):
         # fopen.close()
 
         #roar_model = roar_model_class(num_features, num_classes, hdim=64).to(device)
-        roar_model = model = Network(num_features, 0.5, num_classes, R=3).to(device)
+        roar_model = Network(num_features, 0.5, num_classes, R=3).to(device)
         roar_optimizer = torch.optim.Adam(roar_model.parameters(), lr=roar_lr, weight_decay=5e-4)
 
         roar_model = bgnn_trainAndValidate(roar_model, roar_training_data, None, roar_epochs, roar_optimizer, device, loss_fn, y_fmt=y_fmt, y_type=y_type, mod_e=False, do_bn=False)
