@@ -216,6 +216,10 @@ def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr,
 
             try:
                 gsatmodel.optimizer.zero_grad()
+                data.x = data.x.to(torch.float32)
+                data.edge_attr = data.edge_attr.unsqueeze(-1)
+                data.y = data.y.unsqueeze(-1)
+
                 att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=True)
                 loss.backward()
                 gsatmodel.optimizer.step()
@@ -233,6 +237,10 @@ def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr,
             data.y = data.y.argmax(-1).unsqueeze(dim=-1)
 
             try:
+                data.x = data.x.to(torch.float32)
+                data.edge_attr = data.edge_attr.unsqueeze(-1)
+                data.y = data.y.unsqueeze(-1)
+
                 att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=False)
                 val_epoch_loss += loss.item()
             except:
@@ -267,6 +275,9 @@ def compare_GSAT_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y
         if not data.edge_attr is None:
             data.edge_attr = data.edge_attr.to(torch.float32)
         data = data.to(device)
+        data.x = data.x.to(torch.float32)
+        data.edge_attr = data.edge_attr.unsqueeze(-1)
+        data.y = data.y.unsqueeze(-1)
 
         modl_out = model(data.x, data.edge_index, data.batch, data.edge_attr)
         roar_out = roar_model(data.x, data.edge_index, data.batch, data.edge_attr)

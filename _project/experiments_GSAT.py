@@ -89,9 +89,9 @@ def run_experiments(dl="binary", TOPK=3):
 
     batch_size = 32
     #num_epochs = 20
-    num_epochs = 25
+    num_epochs = 50
     #roar_epochs = 5
-    roar_epochs = 25
+    roar_epochs = 50
 
     orig_lr = 0.001
     roar_lr = 0.001
@@ -117,7 +117,7 @@ def run_experiments(dl="binary", TOPK=3):
     if dl == "zinc":
         train_dl, val_dl, test_dl, num_features, num_classes = getZINC(batch_size)
         use_edge_attr = True
-        n_edge_attr = train_dl.dataset[0].edge_attr.shape[-1]
+        n_edge_attr = 1
         model_config = {'model_name': 'GIN', 'hidden_size': 64, 'n_layers': 2, 'dropout_p': 0.3, 'use_edge_attr': use_edge_attr}
         is_multilabel = False
         mod_y = False
