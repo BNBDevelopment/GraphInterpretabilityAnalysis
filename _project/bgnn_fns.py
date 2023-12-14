@@ -91,6 +91,9 @@ def bgnn_trainAndValidate(model, train_dl, val_dl, num_epochs, optimizer, device
                     print("Error vlaidation")
                     pass
 
+                if val_total > 200:
+                    break
+
 
             try:
                 f1_y = torch.cat(val_ys, dim=0).numpy()
@@ -100,7 +103,7 @@ def bgnn_trainAndValidate(model, train_dl, val_dl, num_epochs, optimizer, device
                 pass
 
 
-            print(f"Epoch {epoch}/{num_epochs} train loss: {epoch_loss/len(train_dl)} val loss: {val_epoch_loss/len(val_dl)}  val_acc:{val_correct/val_total}  val f1: {score_model}")
+            print(f"Epoch {epoch}/{num_epochs} train loss: {epoch_loss/len(train_dl)} val loss: {val_epoch_loss/val_total}  val_acc:{val_correct/val_total}  val f1: {score_model}")
         else:
             print(
                 f"Epoch {epoch}/{num_epochs} train loss: {epoch_loss / len(train_dl)}")
@@ -175,7 +178,6 @@ def compare_gnn_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y_
         ys.append(data.y.flatten().cpu())
         model_preds.append(modl_pred.flatten().cpu())
         roar_preds.append(roar_pred.flatten().cpu())
-
 
 
     print(f"Original Model accuracy: {orig_model_correct / o_total} \t\t Roar Model accuracy: {roar_model_correct / r_total}")

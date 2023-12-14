@@ -64,6 +64,12 @@ def getZINC(batch_size, device=None):
     val_dataset = ZINC("data/zinc", subset=True, split='val', transform=AddRandomWalkPE(walk_length=3, attr_name='pos'))
     test_dataset = ZINC("data/zinc", subset=True, split='test', transform=AddRandomWalkPE(walk_length=3, attr_name='pos'))
 
+
+
+    train_dataset.data = train_dataset.data.to(device)
+    val_dataset.data = val_dataset.data.to(device)
+    test_dataset.data = test_dataset.data.to(device)
+
     num_features = train_dataset.num_features
     num_classes = None
 
@@ -90,6 +96,10 @@ def getPPI(batch_size, device=None):
     num_features = train_dataset.num_features
     num_classes = train_dataset.num_classes
 
+    train_dataset.data = train_dataset.data.to(device)
+    val_dataset.data = val_dataset.data.to(device)
+    test_dataset.data = test_dataset.data.to(device)
+
     # train_dataset.data.y = torch.nn.functional.one_hot(train_dataset.data.y[:, 0].to(torch.long), num_classes)
     # val_dataset.data.y = torch.nn.functional.one_hot(val_dataset.data.y[:, 0].to(torch.long), num_classes)
     # test_dataset.data.y = torch.nn.functional.one_hot(test_dataset.data.y[:, 0].to(torch.long), num_classes)
@@ -101,7 +111,7 @@ def getPPI(batch_size, device=None):
     return train_dl, val_dl, test_dl, num_features, num_classes
 
 def getMNIST(batch_size, device=None):
-    transform = Compose([Cartesian(cat=False), AddRandomWalkPE(walk_length=3, attr_name='pos')])
+    transform = Compose([Cartesian(cat=False)]) #, AddRandomWalkPE(walk_length=3, attr_name='pos')
     train_dataset = MNISTSuperpixels("data/mnist", train=True, transform=transform)
     val_percent = 0.1
     val_start = round(len(train_dataset) * (1 - val_percent))
@@ -109,6 +119,10 @@ def getMNIST(batch_size, device=None):
     val_dataset = train_dataset[val_start:]
     train_dataset = train_dataset[:val_start]
     test_dataset = MNISTSuperpixels("data/mnist", train=False, transform=transform)
+
+    train_dataset.data = train_dataset.data.to(device)
+    val_dataset.data = val_dataset.data.to(device)
+    test_dataset.data = test_dataset.data.to(device)
 
     train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dl = DataLoader(val_dataset, batch_size=1, shuffle=True)

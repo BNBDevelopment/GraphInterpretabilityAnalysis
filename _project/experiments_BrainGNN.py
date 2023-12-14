@@ -21,9 +21,9 @@ def run_experiments(dl="binary", TOPK=3):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     batch_size = 32
     #num_epochs = 20
-    num_epochs = 25
+    num_epochs = 20
     #roar_epochs = 5
-    roar_epochs = 25
+    roar_epochs = 20
 
     orig_lr = 0.001
     roar_lr = 0.001
@@ -60,7 +60,7 @@ def run_experiments(dl="binary", TOPK=3):
         y_type = torch.long
     if dl == "mnist":
         train_dl, val_dl, test_dl, num_features, num_classes = getMNIST(128, device)
-        model = Network(num_features, 0.5, num_classes, R=3).to(device)
+        model = Network(num_features, 0.5, num_classes, R=2).to(device)
         # model = Model_BinClassifier(num_features, num_classes, hdim=64).to(device)
         # roar_model_class = Model_BinClassifier
         loss_fn = CrossEntropyLoss()
@@ -79,47 +79,29 @@ def run_experiments(dl="binary", TOPK=3):
 
     model = bgnn_trainAndValidate(model, train_dl, val_dl, num_epochs, optimizer, device, loss_fn, y_fmt, y_type=y_type)
 
-    for exp_type in ["gnn", "atn"]:
+    for exp_type in ["gnn"]:
         print(f"starting ROAR for: {exp_type}")
         explainer = pick_bgnn_explainer(exp_type, model, topk=TOPK, mode_type=mode_type, return_type=return_type, edge_mask_type=None)
 
         roar_training_data = generate_bgnn_roar_training_data(val_dl, explainer, device)
-        # fopen = open(f"{dl}_roar_training_data_{exp_type}.pkl", "wb")
-        # pickle.dump(roar_training_data, fopen)
-        # fopen.close()
+        fopen = open(f"mnist_{dl}_roar_training_data_{exp_type}.pkl", "wb")
+        pickle.dump(roar_training_data, fopen)
+        fopen.close()
         #
         # fopen = open(f"{dl}_roar_training_data_{exp_type}.pkl", "rb")
         # roar_training_data = pickle.load(fopen)
         # fopen.close()
 
         #roar_model = roar_model_class(num_features, num_classes, hdim=64).to(device)
-        roar_model = Network(num_features, 0.5, num_classes, R=3).to(device)
+        roar_model = Network(num_features, 0.5, num_classes, R=2).to(device)
         roar_optimizer = torch.optim.Adam(roar_model.parameters(), lr=roar_lr, weight_decay=5e-4)
 
         roar_model = bgnn_trainAndValidate(roar_model, roar_training_data, None, roar_epochs, roar_optimizer, device, loss_fn, y_fmt=y_fmt, y_type=y_type, mod_e=False, do_bn=False)
 
         compare_gnn_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y_type)
 
-print("Starting Binary.............................................................................................")
-try:
-    run_experiments("binary", TOPK=6)
-except:
-    pass
 
-print("Starting Binary.............................................................................................")
-try:
-    run_experiments("mnist", TOPK=7)
-except:
-    pass
-
-print("Starting Binary.............................................................................................")
-try:
-    run_experiments("zinc", TOPK=6)
-except:
-    pass
-
-print("Starting Binary.............................................................................................")
-try:
-    run_experiments("ppi", TOPK=120)
-except:
-    pass
+#run_experiments("binary", TOPK=6)
+run_experiments("mnist", TOPK=7)
+run_experiments("zinc", TOPK=6)
+run_experiments("ppi", TOPK=120)
