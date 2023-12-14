@@ -63,8 +63,8 @@ def generate_gsat_roar_training_data(val_dl, explainer, device, use_edge_attr):
         try:
             torch.set_grad_enabled(True)
             data.x = data.x.to(torch.float32)
-            data.edge_attr = data.edge_attr.unsqueeze(-1)
-            data.y = data.y.unsqueeze(-1)
+            # data.edge_attr = data.edge_attr.unsqueeze(-1)
+            # data.y = data.y.unsqueeze(-1)
 
             explanation = explainer(data.x, data.edge_index, batch=data.batch, edge_attr=data.edge_attr)
             sub_graph = explanation.get_explanation_subgraph()

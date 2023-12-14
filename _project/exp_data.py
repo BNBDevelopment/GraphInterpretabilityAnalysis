@@ -2,11 +2,11 @@ import torch
 import torch_geometric
 from torch_geometric.datasets import MoleculeNet, QM7b, ZINC, PPI, MNISTSuperpixels
 from torch_geometric.loader import DataLoader
-from torch_geometric.transforms import Distance, Cartesian
+from torch_geometric.transforms import Distance, Cartesian, AddRandomWalkPE, Compose
 
 
-def getBinaryClassifier(batch_size):
-    ds = MoleculeNet("data/binclass", name='ClinTox')
+def getBinaryClassifier(batch_size, device=None):
+    ds = MoleculeNet("data/binclass", name='ClinTox', transform=AddRandomWalkPE(walk_length=3, attr_name='pos'))
     #bad_idxs = []
     # for idx, item in enumerate(ds):
     #     if 0 in item.x.shape:
@@ -16,6 +16,7 @@ def getBinaryClassifier(batch_size):
 
     n_train = round(len(ds) * 0.8)
     n_val = round(len(ds) * 0.1)
+    ds.data = ds.data.to(device)
     ds.x = ds.x.to(torch.float32)
     ds.data.x = ds.data.x.to(torch.float32)
 
@@ -37,8 +38,8 @@ class FormatAsFloat:
         data.x = data.x.to(torch.float32)
         return data
 
-def getQM7b(batch_size):
-    init_dataset = QM7b("data/qm7b", transform=torch_geometric.transforms.Compose([FormatAsFloat()]))
+def getQM7b(batch_size, device=None):
+    init_dataset = QM7b("data/qm7b", transform=Compose([FormatAsFloat(), AddRandomWalkPE(walk_length=3, attr_name='pos')]))
 
     n_train = round(len(init_dataset) * 0.8)
     n_val = round(len(init_dataset) * 0.1)
@@ -58,10 +59,10 @@ def getQM7b(batch_size):
 
     return train_dl, val_dl, test_dl, num_features, num_classes
 
-def getZINC(batch_size):
-    train_dataset = ZINC("data/zinc", subset=True, split='train')
-    val_dataset = ZINC("data/zinc", subset=True, split='val')
-    test_dataset = ZINC("data/zinc", subset=True, split='test')
+def getZINC(batch_size, device=None):
+    train_dataset = ZINC("data/zinc", subset=True, split='train', transform=AddRandomWalkPE(walk_length=3, attr_name='pos'))
+    val_dataset = ZINC("data/zinc", subset=True, split='val', transform=AddRandomWalkPE(walk_length=3, attr_name='pos'))
+    test_dataset = ZINC("data/zinc", subset=True, split='test', transform=AddRandomWalkPE(walk_length=3, attr_name='pos'))
 
     num_features = train_dataset.num_features
     num_classes = None
@@ -72,11 +73,19 @@ def getZINC(batch_size):
 
     return train_dl, val_dl, test_dl, num_features, num_classes
 
+class AddEdgeAttr:
+    def __call__(self, data):
+        data.x = data.x.to(torch.float32)
+        data.edge_attr = torch.ones(data.edge_index.shape[-1], 1).to(torch.float32)
+        return data
 
-def getPPI(batch_size):
-    train_dataset = PPI("data/ppi", split='train')
-    val_dataset = PPI("data/ppi", split='val')
-    test_dataset = PPI("data/ppi", split='test')
+
+
+
+def getPPI(batch_size, device=None):
+    train_dataset = PPI("data/ppi", split='train', transform=Compose([AddEdgeAttr(), AddRandomWalkPE(walk_length=3, attr_name='pos')]))
+    val_dataset = PPI("data/ppi", split='val', transform=Compose([AddEdgeAttr(), AddRandomWalkPE(walk_length=3, attr_name='pos')]))
+    test_dataset = PPI("data/ppi", split='test', transform=Compose([AddEdgeAttr(), AddRandomWalkPE(walk_length=3, attr_name='pos')]))
 
     num_features = train_dataset.num_features
     num_classes = train_dataset.num_classes
@@ -91,8 +100,8 @@ def getPPI(batch_size):
 
     return train_dl, val_dl, test_dl, num_features, num_classes
 
-def getMNIST(batch_size):
-    transform = Cartesian(cat=False)
+def getMNIST(batch_size, device=None):
+    transform = Compose([Cartesian(cat=False), AddRandomWalkPE(walk_length=3, attr_name='pos')])
     train_dataset = MNISTSuperpixels("data/mnist", train=True, transform=transform)
     val_percent = 0.1
     val_start = round(len(train_dataset) * (1 - val_percent))

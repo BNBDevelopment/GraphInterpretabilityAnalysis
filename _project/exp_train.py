@@ -51,6 +51,11 @@ def count_gsat_correct(data, y, raw_prediction, y_fmt):
         else:
             return 0, 1
 
+    if len(y.shape) > 1 and y.shape[1] > 20:
+        #raw_prediction = raw_prediction.transpose(1,2)
+        where_matches = torch.where(raw_prediction > 0, 1.0, 0.0) == y
+        matches = where_matches.sum().item()
+        return matches, math.prod(list(y.shape))
     if len(y.shape) > 1 and y.shape[1] > 1:
         #raw_prediction = raw_prediction.transpose(1,2)
         where_matches = raw_prediction.argmax(-1) == y
@@ -217,8 +222,8 @@ def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr,
             try:
                 gsatmodel.optimizer.zero_grad()
                 data.x = data.x.to(torch.float32)
-                data.edge_attr = data.edge_attr.unsqueeze(-1)
-                data.y = data.y.unsqueeze(-1)
+                #data.edge_attr = data.edge_attr.unsqueeze(-1)
+                #data.y = data.y.unsqueeze(-1)
 
                 att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=True)
                 loss.backward()
@@ -233,13 +238,13 @@ def trainAndValidateGSAT(gsatmodel, train_dl, val_dl, num_epochs, use_edge_attr,
         gsatmodel.clf.eval()
         for data in tqdm(val_dl, unit="batch", total=len(val_dl)):
             data = process_data(data, use_edge_attr)
-            data.edge_attr = data.edge_attr.to(torch.float32)
-            data.y = data.y.argmax(-1).unsqueeze(dim=-1)
+            # data.edge_attr = data.edge_attr.to(torch.float32)
+            # data.y = data.y.argmax(-1).unsqueeze(dim=-1)
 
             try:
                 data.x = data.x.to(torch.float32)
-                data.edge_attr = data.edge_attr.unsqueeze(-1)
-                data.y = data.y.unsqueeze(-1)
+                #.edge_attr = data.edge_attr.unsqueeze(-1)
+                #data.y = data.y.unsqueeze(-1)
 
                 att, loss, loss_dict, clf_logits = gsatmodel.forward_pass(data.to(device), epoch, training=False)
                 val_epoch_loss += loss.item()
@@ -276,8 +281,8 @@ def compare_GSAT_orig_roar(model, roar_model, test_dl, device, loss_fn, y_fmt, y
             data.edge_attr = data.edge_attr.to(torch.float32)
         data = data.to(device)
         data.x = data.x.to(torch.float32)
-        data.edge_attr = data.edge_attr.unsqueeze(-1)
-        data.y = data.y.unsqueeze(-1)
+        # data.edge_attr = data.edge_attr.unsqueeze(-1)
+        # data.y = data.y.unsqueeze(-1)
 
         modl_out = model(data.x, data.edge_index, data.batch, data.edge_attr)
         roar_out = roar_model(data.x, data.edge_index, data.batch, data.edge_attr)

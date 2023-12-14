@@ -133,11 +133,11 @@ def run_experiments(dl="binary", TOPK=3):
         mod_y = False
 
     if dl == "ppi":
-        train_dl, val_dl, test_dl, num_features, num_classes = getPPI(2)
+        train_dl, val_dl, test_dl, num_features, num_classes = getPPI(1)
         use_edge_attr = True
         n_edge_attr = train_dl.dataset[0].edge_attr.shape[-1]
         model_config = {'model_name': 'GIN', 'hidden_size': 64, 'n_layers': 2, 'dropout_p': 0.3, 'use_edge_attr': use_edge_attr}
-        is_multilabel = False
+        is_multilabel = True
 
         orig_model = create_gsat_model(num_features, n_edge_attr, num_classes, is_multilabel, model_config, device)
         roar_model = create_gsat_model(num_features, n_edge_attr, num_classes, is_multilabel, model_config, device)
@@ -145,7 +145,7 @@ def run_experiments(dl="binary", TOPK=3):
         y_fmt = "none"
         mode_type = 'multiclass_classification'
         return_type = 'probs'
-        y_type = torch.long
+        y_type = torch.float32
         roar_loss_fn = CrossEntropyLoss()
         mod_y = False
 
@@ -219,5 +219,5 @@ def run_experiments(dl="binary", TOPK=3):
 
 #run_experiments("binary", TOPK=2)
 #run_experiments("mnist", TOPK=7)
-run_experiments("zinc", TOPK=2)
-#run_experiments("ppi", TOPK=120)
+#run_experiments("zinc", TOPK=2)
+run_experiments("ppi", TOPK=120)
